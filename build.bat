@@ -1,11 +1,11 @@
  @echo off
  
  set IgnoreWarnings=-wd4201 -wd4204 -wd4127
- set CommonCompilerFlags=-nologo -MTd -fp:fast -Gm- -GR- -EHa -WX -Oi -W4 -FC %IgnoreWarnings% -IE:\Documents\Coding\C\h -DINTERNAL=1 -DLIVE_DEV=1
+ set CommonCompilerFlags=-nologo -MTd -fp:fast -Gm- -GR- -EHa -WX -Oi -W4 -FC %IgnoreWarnings% -IE:\Documents\Coding\C\h -DINTERNAL=1
+ REM -DLIVE_DEV=1
  REM set DebugCompilerFlags=-O2 -Z7 
 REM use argument for optimisation level
-set DebugCompilerFlags=%1
-REM -Z7
+set DebugCompilerFlags=%1 -Z7
  set CommonLinkerFlags=-incremental:no -opt:ref user32.lib gdi32.lib winmm.lib
  
  IF NOT EXIST E:\Documents\Coding\C\build mkdir E:\Documents\Coding\C\build
@@ -16,7 +16,7 @@ REM -Z7
  del *.pdb > NUL 2> NUL
  echo WAITING FOR PDB > lock.tmp
  
-timethis cl %CommonCompilerFlags% %DebugCompilerFlags% E:\Documents\Coding\C\twinstick\twinstick.c -Fmtwinstick.map -LD /link %CommonLinkerFlags% -PDB:twinstick%random%.pdb -EXPORT:UpdateAndRender
+REM timethis cl %CommonCompilerFlags% %DebugCompilerFlags% E:\Documents\Coding\C\twinstick\twinstick.c -Fmtwinstick.map -LD /link %CommonLinkerFlags% -PDB:twinstick%random%.pdb -EXPORT:UpdateAndRender
  del lock.tmp
  
  timethis cl %CommonCompilerFlags% %DebugCompilerFlags% E:\Documents\Coding\C\twinstick\win32_twinstick.c -Fmwin32_twinstick.map /link %CommonLinkerFlags%

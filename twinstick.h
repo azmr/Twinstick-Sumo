@@ -22,8 +22,19 @@ typedef struct memory
 	debug_platform_write_entire_file *WriteEntireFile;
 } memory;
 
+typedef struct ai_behaviour
+{
+	f32 MoveOverPrediction; // Pacivity
+	f32 AccountForDDP; // Orbital-direct-? 0-2f ...negative?
+	u64 FramesBetweenFiring;
+	b32 AimDDP;
+	/* b32 FireWhenClose; // Or when far */
+	/* f64 FireDistanceThreshold; // Fires when closer to/farther from player */
+} ai_behaviour;
+
 typedef struct player
 {
+	ai_behaviour AI;
 	v2 P;
 	v2 dP;
 	v2 ddP;
@@ -32,7 +43,7 @@ typedef struct player
 	colour LineCol;
 	f32 Radius;
 	f32 BulletRadius;
-	u64 F; // FrameCount
+	b32 IsAI;
 	u8 ControllerNum;
 	u8 Score;
 
@@ -55,7 +66,6 @@ typedef struct state
 	v2 MouseP;
 	f32 dt; // frame time
 	font DefaultFont;
-	u64 FrameCount;
 	player Player[3];
 	f32 InitialPlayerRadius;
 	f32 InitialBulletRadius;

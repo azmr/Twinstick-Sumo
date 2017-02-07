@@ -1,11 +1,12 @@
 #define _CRT_SECURE_NO_WARNINGS
-#ifdef LIVE_DEV
+#if  LIVE_DEV
 #include "twinstick.h"
 #include <fonts.c>
 #include <stb_sprintf.h>
 #endif
 global_variable b32 GlobalPause;
 global_variable u64 GlobalFramesToRegainControl;
+global_variable u64 GlobalFrameCount;
 
 internal void
 BounceScreenEdges(player *Player, v2 ImgSize, f32 BounceFactor)
@@ -187,6 +188,23 @@ DrawBulletStatus(image_buffer *Buffer, player P1)
 }
 
 internal void
+AssignRandomAIBehaviours(player *Player, u64 Seed)
+{
+	ai_behaviour AI = {0};
+	u64 ColourSeed = (u64)(Player->Col.R * 255.f);
+	Seed += Player->Score + GlobalFrameCount + ColourSeed;
+	AI.MoveOverPrediction = 10.f + ((f32)(Seed % 203) / 15.f);
+	AI.AccountForDDP = (f32)(Seed % 200) / 100.f;
+	AI.FramesBetweenFiring = 3 + (Seed % 30);
+	AI.AimDDP = (Seed + GlobalFrameCount) % 2;
+	// TODO:
+	/* AI.FireWhenClose = Seed % 2; // Or when far */
+	/* AI.FireDistanceThreshold; // Fires when closer to/farther from player */
+
+	Player->AI = AI;
+}
+
+internal void
 ResetPlayerPositions(player *P1, player *P2, player *Ob, v2 Centre, f32 Distance)
 {
 	P1->P = Centre;
@@ -205,9 +223,18 @@ ResetPlayerPositions(player *P1, player *P2, player *Ob, v2 Centre, f32 Distance
 	Ob->P.Y += (5.f*Distance);
 	Ob->dP.Y = 0.f;
 	Ob->ddP.X = 0.f;
-	Ob->F = 0;
+
+	for(int BI = 0; BI < NUM_BULLETS; ++BI)
+	{
+		P1->BulletState[BI] = BS_Free;
+		P2->BulletState[BI] = BS_Free;
+	}
+
+	AssignRandomAIBehaviours(P1, 12);
+	AssignRandomAIBehaviours(P2, 17);
 
 	GlobalFramesToRegainControl = 20;
+	GlobalFrameCount = 0;
 }
 
 internal void
@@ -236,6 +263,10 @@ UPDATE_AND_RENDER(UpdateAndRender)
 	player *Obstacle = &State->Player[2];
 	controller *C1 = &Input.New->Controllers[1];
 	controller *C2 = &Input.New->Controllers[2];
+	if(!C1->IsConnected) P1->IsAI = 1;
+	else P1->IsAI = 0;
+	if(!C2->IsConnected) P2->IsAI = 1;
+	else P2->IsAI = 0;
 		State->InitialPlayerRadius = 30.f;
 		State->InitialBulletRadius = 10.f;
 		State->BulletSpeed = 18.f;
@@ -243,7 +274,7 @@ UPDATE_AND_RENDER(UpdateAndRender)
 	if(!Memory->IsInitialized)
 	{
 		GlobalPause = 1;
-		State->FrameCount = 0;
+		GlobalFrameCount = 0;
 		*P1 = ZeroPlayer;
 		*P2 = ZeroPlayer;
 		P1->Radius = State->InitialPlayerRadius;
@@ -253,7 +284,6 @@ UPDATE_AND_RENDER(UpdateAndRender)
 		P2->BulletRadius = State->InitialBulletRadius;
 
 		State->ShowObstacle = 0;
-
 		ResetPlayerPositions(P1, P2, Obstacle, ScreenCentre, State->InitialPlayerRadius);
 
 		/////////////////////////////
@@ -281,11 +311,25 @@ UPDATE_AND_RENDER(UpdateAndRender)
 		if(!GlobalFramesToRegainControl)
 		{
 			P1->ddP = V2(C1->LStickAverageX, C1->LStickAverageY);
-			P2->ddP = V2(C2->LStickAverageX, C2->LStickAverageY);
+			if(P2->IsAI)
+			{
+				v2 EnemyDir = V2Sub(P1->P, P2->P);
+				// (Over-)predict enemy movement
+				EnemyDir = V2Add(EnemyDir, V2Mult(P2->AI.MoveOverPrediction, P1->dP));
+				// Account for current movement:
+				// AI option: amount accounting for current movement
+				EnemyDir = V2Sub(EnemyDir, V2Mult(P2->AI.AccountForDDP, P2->dP));
+				/* v2 dPDesired = V2Add(CentreDir, EnemyDir); */
+				P2->ddP = Norm(EnemyDir);
+			}
+			else
+			{
+				P2->ddP = V2(C2->LStickAverageX, C2->LStickAverageY);
+			}
 		}
 
 		f32 SinPeriod = 25.f;
-		++Obstacle->F;
+		++GlobalFrameCount;
 		f32 Friction = 0.8f;
 		f32 AccelFactor = 2.4f;
 		P1->dP = V2Mult(Friction, P1->dP);
@@ -296,7 +340,7 @@ UPDATE_AND_RENDER(UpdateAndRender)
 		P2->P = V2Add(P2->P, P2->dP);
 		v2 pObstacleP = Obstacle->P;
 		Obstacle->P.Y = ScreenCentre.Y +
-			(ArenaRadius - 2.5f * Obstacle->Radius) * Cos(((f32)Obstacle->F)/SinPeriod);
+			(ArenaRadius - 2.5f * Obstacle->Radius) * Cos(((f32)GlobalFrameCount)/SinPeriod);
 		Obstacle->dP = V2Sub(Obstacle->P, pObstacleP);
 
 	BounceScreenEdges(P1, ImgSize, BNC_Wall);
@@ -306,16 +350,40 @@ UPDATE_AND_RENDER(UpdateAndRender)
 
 	// Player Aiming
 	// NOTE: Sticks are from -1 to 1 - can give less powerful shot
-	if(C1->RStickAverageX || C1->RStickAverageY) P1->AimDir = V2(C1->RStickAverageX, C1->RStickAverageY);
+	if(P1->IsAI)
+	{
+
+	}
+	else if(C1->RStickAverageX || C1->RStickAverageY) P1->AimDir = V2(C1->RStickAverageX, C1->RStickAverageY);
 	else P1->AimDir = V2(C1->LStickAverageX, C1->LStickAverageY);
-	if(C2->RStickAverageX || C2->RStickAverageY) P2->AimDir = V2(C2->RStickAverageX, C2->RStickAverageY);
+	if(P2->IsAI)
+	{
+		C2->Button.RB.HalfTransitionCount = 0;
+		// AI option: aiming dP vs ddP
+		P2->AimDir = Norm(P2->AI.AimDDP ? P2->ddP : P2->dP);
+		// AI option: frames between firing
+		if(C2->Button.RB.EndedDown)
+		{
+			// Unpress key if pressed
+			C2->Button.RB.EndedDown = 0;
+			C2->Button.RB.HalfTransitionCount = 1;//!C2->Button.RB.HalfTransitionCount;
+		}
+		// Fires every time it hits 0 and Player is in threshold
+		else if(!(GlobalFrameCount % P2->AI.FramesBetweenFiring))
+		{
+			C2->Button.RB.EndedDown = 1;
+			C2->Button.RB.HalfTransitionCount = 1;//!C2->Button.RB.HalfTransitionCount;
+		}
+	}
+	else if(C2->RStickAverageX || C2->RStickAverageY) P2->AimDir = V2(C2->RStickAverageX, C2->RStickAverageY);
 	else P2->AimDir = V2(C2->LStickAverageX, C2->LStickAverageY);
 
 	if(!GlobalFramesToRegainControl)
 	{	// Fire bullet
 		// NOTE: takes a slot if one is free, otherwise does nothing
 		FireBulletsWhenTriggered(P1, C1, State->BulletSpeed);
-	}FireBulletsWhenTriggered(P2, C2, State->BulletSpeed);
+		FireBulletsWhenTriggered(P2, C2, State->BulletSpeed);
+	}
 
 	// Update bullet position
 	f32 BulletPower = 1.3f;
@@ -468,7 +536,7 @@ UPDATE_AND_RENDER(UpdateAndRender)
 ///////////////////////////////////////////////////
 
 	char Message[512];
-	stbsp_sprintf(Message, "%.1ffps", 1.f/(State->dt));
+	stbsp_sprintf(Message, "%.1ffps 2ddP(%.3f, %.3f)", 1.f/(State->dt), P2->ddP.X, P2->ddP.Y);
 			/* "ARGB: (%.2f, %.2f, %.2f, %.2f)", */
 			/* CheckPxCol.A, CheckPxCol.R, CheckPxCol.G, CheckPxCol.B); */
 	DrawString(ScreenBuffer, &State->DefaultFont, Message, 17, 10, 10, WHITE);

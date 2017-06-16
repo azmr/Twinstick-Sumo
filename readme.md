@@ -1,6 +1,8 @@
 Twinstick Sumo
 ==============
 
+![twinstick sumo demo](twinstick-480.gif)
+
 A game made in C over the course of (primarily) a single day using an engine built 'from scratch'.
 
 [Download here](https://github.com/azmr/twinstick-sumo/releases).
